@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,7 +28,7 @@ section.active,.view.active{display:block}
 .muted{color:#66766e}
 .small{font-size:13px}
 label{display:block;font-weight:600;margin:12px 0 6px}
-input,select{width:100%;padding:12px;font:inherit;border:1px solid #c7d3ca;border-radius:10px;background:white}
+input,select,textarea{width:100%;padding:12px;font:inherit;border:1px solid #c7d3ca;border-radius:10px;background:white}
 table{width:100%;border-collapse:collapse}
 th,td{padding:11px 9px;border-bottom:1px solid #e8eee9;text-align:left}
 td.number,th.number{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -74,18 +75,9 @@ tfoot td{font-weight:750;background:#edf3ee}
 <input id="month" type="month">
 </div>
 <div class="grid">
-<div class="card">
-<div class="muted">This month</div>
-<div class="metric" id="monthTotal">—</div>
-</div>
-<div class="card">
-<div class="muted">All recorded spending</div>
-<div class="metric" id="allTotal">—</div>
-</div>
-<div class="card">
-<div class="muted">Expenses this month</div>
-<div class="metric" id="monthCount">—</div>
-</div>
+<div class="card"><div class="muted">This month</div><div class="metric" id="monthTotal">—</div></div>
+<div class="card"><div class="muted">All recorded spending</div><div class="metric" id="allTotal">—</div></div>
+<div class="card"><div class="muted">Expenses this month</div><div class="metric" id="monthCount">—</div></div>
 </div>
 <div class="card">
 <h2>Spending by category</h2>
@@ -112,6 +104,17 @@ tfoot td{font-weight:750;background:#edf3ee}
 </div>
 </div>
 </div>
+
+<div class="card">
+<h2>Monthly Notes</h2>
+<p class="muted small">Explain unusual spending such as a dentist appointment or pet visit.</p>
+<label for="noteMonth">Notes for month</label>
+<input type="month" id="noteMonth">
+<label for="monthNote">Why was spending higher or different?</label>
+<textarea id="monthNote" rows="4" maxlength="3000" placeholder="For example: Unexpected vet visit and dentist appointment."></textarea>
+<p><button id="saveMonthNote" type="button" disabled>Save monthly note</button></p>
+<div id="noteStatus" role="status" class="small muted"></div>
+</div>
 </section>
 
 <section id="add">
@@ -124,8 +127,8 @@ tfoot td{font-weight:750;background:#edf3ee}
 <input type="number" id="amount" min="0.01" step="0.01" required>
 <label for="category">Category</label>
 <select id="category" required></select>
-<label for="note">Note (optional)</label>
-<input id="note" maxlength="150">
+<label for="note">Reason for purchase (optional)</label>
+<input id="note" maxlength="150" placeholder="For example: Dentist appointment">
 <p><button id="save" type="submit" disabled>Save expense</button></p>
 </form>
 </div>
@@ -148,7 +151,7 @@ tfoot td{font-weight:750;background:#edf3ee}
 <section id="settings">
 <div class="card">
 <h2>Backups</h2>
-<p>Download all recorded expenses.</p>
+<p>Download all recorded expenses and notes.</p>
 <button id="csv">Download CSV</button>
 <button id="backup">Download JSON</button>
 <p class="muted small">The Google Sheet is the online source of truth. This website does not import backups into it.</p>
@@ -159,13 +162,14 @@ tfoot td{font-weight:750;background:#edf3ee}
 const ENDPOINT='https://script.google.com/macros/s/AKfycbyNaoAwDD-qkVYfH4K3vZIyBp0bTfaeD0sQ47KkxuxbBBWfyNBIYw3hynS9lbwQ5BU/exec';
 const fallbackCategories=['Grocery','Gas','Entertainment','Dining Out','Pet Food + Expsenses','Misc - Bday, Holidays, gifts, food','Misc - Household items','Transportation: Maintence Repairs','Travel Camping','Gummies','Personal Care: Nails, hair','Medical','Other'];
 const $=id=>document.getElementById(id),money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
-let entries=[],categories=fallbackCategories,connected=false;
+let entries=[],categories=fallbackCategories,connected=false,monthlyNotes={};
 const localDate=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 function status(s){$('status').textContent=s}
 function fillCategories(){const sel=$('category');sel.replaceChildren();categories.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.append(o)})}
 function jsonp(url){return new Promise((resolve,reject)=>{const cb='momBudgetCb'+Date.now()+Math.floor(Math.random()*1e6),script=document.createElement('script');const timeout=setTimeout(()=>{clean();reject(Error('Connection timed out'))},15000);function clean(){clearTimeout(timeout);delete window[cb];script.remove()}window[cb]=data=>{clean();resolve(data)};script.onerror=()=>{clean();reject(Error('Connection failed'))};script.src=url+'?callback='+cb+'&t='+Date.now();document.head.append(script)})}
-async function refresh(){const result=await jsonp(ENDPOINT);if(!result.ok||!Array.isArray(result.entries))throw Error(result.error||'Invalid server response');entries=result.entries;categories=Array.isArray(result.categories)?result.categories:fallbackCategories;connected=true;$('save').disabled=false;$('errorBanner').classList.add('hidden');fillCategories();populateYears();draw();status('Connected to Google Sheets')}
+async function refresh(){const result=await jsonp(ENDPOINT);if(!result.ok||!Array.isArray(result.entries))throw Error(result.error||'Invalid server response');entries=result.entries;monthlyNotes=result.monthlyNotes||{};categories=Array.isArray(result.categories)?result.categories:fallbackCategories;connected=true;$('save').disabled=false;$('saveMonthNote').disabled=false;$('errorBanner').classList.add('hidden');fillCategories();populateYears();draw();loadMonthNote();status('Connected to Google Sheets')}
 function populateYears(){const chosen=$('year').value||String(new Date().getFullYear());const years=new Set([2026,new Date().getFullYear(),...entries.map(e=>Number(String(e.date).slice(0,4))).filter(Number.isFinite)]);for(let y=2026;y<=new Date().getFullYear()+2;y++)years.add(y);$('year').replaceChildren();[...years].sort((a,b)=>b-a).forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;$('year').append(o)});$('year').value=[...years].some(y=>String(y)===chosen)?chosen:'2026'}
+function loadMonthNote(){const key=$('noteMonth').value;$('monthNote').value=monthlyNotes[key]||'';$('noteStatus').textContent=monthlyNotes[key]?'Saved note for '+key:'No note saved for this month'}
 function draw(){const m=$('month').value,monthly=entries.filter(e=>String(e.date).startsWith(m));$('monthTotal').textContent=money(monthly.reduce((s,e)=>s+Number(e.amount),0));$('allTotal').textContent=money(entries.reduce((s,e)=>s+Number(e.amount),0));$('monthCount').textContent=monthly.length;const totals=categories.map(c=>({name:c,total:monthly.filter(e=>e.category===c).reduce((s,e)=>s+Number(e.amount),0)}));const max=Math.max(1,...totals.map(x=>x.total));$('categories').replaceChildren();totals.forEach(x=>{const outer=document.createElement('div');outer.style.margin='14px 0';const r=document.createElement('div');r.className='row';const n=document.createElement('span');n.textContent=x.name;const v=document.createElement('strong');v.textContent=money(x.total);r.append(n,v);const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('span');fill.style.width=(100*x.total/max)+'%';bar.append(fill);outer.append(r,bar);$('categories').append(outer)});drawHistory();drawAnnual()}
 function cell(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el}
 function drawAnnual(){const year=Number($('year').value)||2026,months=year===2026?[9,10,11,12]:Array.from({length:12},(_,i)=>i+1),names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];$('yearHint').textContent=year===2026?'September–December 2026 · Cumulative totals are for this period.':'January–December '+year+' · Scroll horizontally on smaller screens.';const head=document.createElement('tr');head.append(cell('th','Category'));months.forEach(m=>head.append(cell('th',names[m-1],'number')));head.append(cell('th','Cumulative','number'));$('annualHead').replaceChildren(head);$('annualBody').replaceChildren();const columnTotals=months.map(()=>0);let grand=0;categories.forEach(c=>{const row=document.createElement('tr');row.append(cell('td',c));let cumulative=0;months.forEach((m,i)=>{const amount=entries.filter(e=>e.category===c&&String(e.date).startsWith(year+'-'+String(m).padStart(2,'0'))).reduce((s,e)=>s+Number(e.amount),0);cumulative+=amount;columnTotals[i]+=amount;row.append(cell('td',money(amount),'number'))});grand+=cumulative;row.append(cell('td',money(cumulative),'number'));$('annualBody').append(row)});const total=document.createElement('tr');total.append(cell('td','Total Amount'));columnTotals.forEach(v=>total.append(cell('td',money(v),'number')));total.append(cell('td',money(grand),'number'));$('annualFoot').replaceChildren(total)}
@@ -174,11 +178,13 @@ async function send(payload){await fetch(ENDPOINT,{method:'POST',mode:'no-cors',
 async function removeEntry(id){if(!connected||!confirm('Delete this expense?'))return;status('Deleting...');try{await send({action:'delete',id});if(entries.some(e=>e.id===id))throw Error('Deletion not confirmed');status('Expense deleted')}catch(err){status('Could not confirm deletion: '+err.message)}}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button,section').forEach(el=>el.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')});
 function setView(v){$('monthlyView').classList.toggle('active',v==='monthly');$('annualView').classList.toggle('active',v==='annual');$('monthlyButton').classList.toggle('active',v==='monthly');$('annualButton').classList.toggle('active',v==='annual')}
-$('monthlyButton').onclick=()=>setView('monthly');$('annualButton').onclick=()=>setView('annual');$('month').onchange=draw;$('historyMonth').onchange=draw;$('year').onchange=drawAnnual;
-$('expenseForm').onsubmit=async event=>{event.preventDefault();if(!connected)return;const amount=Math.round(Number($('amount').value)*100)/100;if(!Number.isFinite(amount)||amount<=0)return status('Enter a valid amount');const item={id:crypto.randomUUID(),date:$('date').value,amount,category:$('category').value,note:$('note').value.trim()};$('save').disabled=true;status('Saving...');try{await send({action:'add',entry:item});if(!entries.some(e=>e.id===item.id))throw Error('Save not confirmed');$('expenseForm').reset();$('date').value=localDate();$('month').value=item.date.slice(0,7);$('historyMonth').value=item.date.slice(0,7);$('year').value=item.date.slice(0,4);draw();status('Expense saved');document.querySelector('[data-tab="dashboard"]').click()}catch(err){status('Save could not be confirmed. Check the sheet before retrying: '+err.message)}finally{$('save').disabled=!connected}};
+$('noteMonth').onchange=loadMonthNote;
+$('saveMonthNote').onclick=async()=>{if(!connected)return;const month=$('noteMonth').value,note=$('monthNote').value.trim();if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return status('Choose a month');$('saveMonthNote').disabled=true;$('noteStatus').textContent='Saving note...';try{await send({action:'saveMonthlyNote',month,note});if((monthlyNotes[month]||'')!==note)throw Error('Note was not confirmed');$('noteStatus').textContent=note?'Monthly note saved':'Monthly note cleared'}catch(err){$('noteStatus').textContent='Save could not be confirmed: '+err.message}finally{$('saveMonthNote').disabled=!connected}};
+$('monthlyButton').onclick=()=>setView('monthly');$('annualButton').onclick=()=>setView('annual');$('month').onchange=()=>{draw();$('noteMonth').value=$('month').value;loadMonthNote()};$('historyMonth').onchange=draw;$('year').onchange=drawAnnual;
+$('expenseForm').onsubmit=async event=>{event.preventDefault();if(!connected)return;const amount=Math.round(Number($('amount').value)*100)/100;if(!Number.isFinite(amount)||amount<=0)return status('Enter a valid amount');const item={id:crypto.randomUUID(),date:$('date').value,amount,category:$('category').value,note:$('note').value.trim()};$('save').disabled=true;status('Saving...');try{await send({action:'add',entry:item});if(!entries.some(e=>e.id===item.id))throw Error('Save not confirmed');$('expenseForm').reset();$('date').value=localDate();$('noteMonth').value=localDate().slice(0,7);$('month').value=item.date.slice(0,7);$('historyMonth').value=item.date.slice(0,7);$('year').value=item.date.slice(0,4);draw();status('Expense saved');document.querySelector('[data-tab="dashboard"]').click()}catch(err){status('Save could not be confirmed. Check the sheet before retrying: '+err.message)}finally{$('save').disabled=!connected}};
 function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-$('backup').onclick=()=>download('moms-budget-backup.json',JSON.stringify({categories,entries},null,2),'application/json');$('csv').onclick=()=>{const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';const rows=[['Date','Category','Amount','Note'],...entries.map(e=>[e.date,e.category,e.amount,e.note])];download('moms-budget.csv',rows.map(r=>r.map(quote).join(',')).join('\r\n'),'text/csv')};
-$('date').value=localDate();$('month').value=localDate().slice(0,7);$('historyMonth').value=localDate().slice(0,7);fillCategories();populateYears();refresh().catch(err=>{$('errorBanner').classList.remove('hidden');status('Connection failed: '+err.message)});
+$('backup').onclick=()=>download('moms-budget-backup.json',JSON.stringify({categories,entries,monthlyNotes},null,2),'application/json');$('csv').onclick=()=>{const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';const rows=[['Date','Category','Amount','Note'],...entries.map(e=>[e.date,e.category,e.amount,e.note])];download('moms-budget.csv',rows.map(r=>r.map(quote).join(',')).join('\r\n'),'text/csv')};
+$('date').value=localDate();$('noteMonth').value=localDate().slice(0,7);$('month').value=localDate().slice(0,7);$('historyMonth').value=localDate().slice(0,7);fillCategories();populateYears();refresh().catch(err=>{$('errorBanner').classList.remove('hidden');status('Connection failed: '+err.message)});
 </script>
 </body>
 </html>
