@@ -1,0 +1,596 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mom's Budget</title>
+
+<style>
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #24322d;
+  background: #f7f8f5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+header {
+  background: #25594c;
+  color: white;
+  padding: 24px 20px;
+  text-align: center;
+}
+h1 { margin: 0; font-size: 30px; }
+header p { margin: 8px 0 0; color: #e4eee9; }
+
+.wrap {
+  max-width: 960px;
+  margin: auto;
+  padding: 20px;
+}
+nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+button {
+  border: 0;
+  background: #25594c;
+  color: white;
+  padding: 13px 18px;
+  border-radius: 12px;
+  font-size: 16px;
+  cursor: pointer;
+}
+button:disabled { opacity: .5; cursor: wait; }
+nav button { background: #e3ebe6; color: #24483c; }
+nav button.active { background: #25594c; color: white; }
+
+section { display: none; }
+section.active { display: block; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.card {
+  background: white;
+  border: 1px solid #e1e8e2;
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.metric { font-size: 30px; font-weight: 750; margin: 7px 0; }
+label { display: block; font-weight: 600; margin: 13px 0 5px; }
+
+input, select {
+  width: 100%;
+  padding: 13px;
+  font: inherit;
+  border: 1px solid #c7d3ca;
+  border-radius: 10px;
+  background: white;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: left;
+  padding: 11px 7px;
+  border-bottom: 1px solid #e8eee9;
+}
+td:last-child, th:last-child { text-align: right; }
+.muted { color: #66766e; }
+.bar {
+  background: #e5ece7;
+  border-radius: 8px;
+  height: 11px;
+  overflow: hidden;
+}
+.bar span {
+  display: block;
+  background: #448a75;
+  height: 100%;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.danger { background: #a33b3b; }
+.small { font-size: 13px; }
+.hidden { display: none; }
+.notice {
+  padding: 12px;
+  border-radius: 9px;
+  background: #fff4da;
+  margin-bottom: 15px;
+}
+#status { font-size: 14px; margin: 10px 0; }
+
+@media(max-width:550px) {
+  th, td { font-size: 13px; padding: 9px 3px; }
+  .wrap { padding: 12px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Mom's Budget</h1>
+  <p>Easy spending tracker · 2026 and beyond</p>
+</header>
+
+<main class="wrap">
+
+<div class="notice hidden" id="setupNotice">
+  Unable to connect to online storage.
+</div>
+
+<nav>
+  <button class="active" data-tab="dashboard">Overview</button>
+  <button data-tab="add">+ Add Expense</button>
+  <button data-tab="history">Expenses</button>
+  <button data-tab="settings">Backup & Setup</button>
+</nav>
+
+<div id="status" role="status">Connecting to budget...</div>
+
+<section id="dashboard" class="active">
+
+  <div class="card">
+    <label for="month">View month</label>
+    <input type="month" id="month" value="2026-10">
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="muted">This month</div>
+      <div class="metric" id="monthTotal">$0</div>
+    </div>
+    <div class="card">
+      <div class="muted">All recorded spending</div>
+      <div class="metric" id="allTotal">$0</div>
+    </div>
+    <div class="card">
+      <div class="muted">Expenses this month</div>
+      <div class="metric" id="monthCount">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Spending by category</h2>
+    <div id="categories"></div>
+  </div>
+
+</section>
+
+<section id="add">
+  <div class="card">
+    <h2>Add an expense</h2>
+
+    <form id="expenseForm">
+      <label>Date
+        <input type="date" id="date" required>
+      </label>
+
+      <label>Amount ($)
+        <input type="number" id="amount" min="0.01"
+               step="0.01" placeholder="0.00" required>
+      </label>
+
+      <label>Category
+        <select id="category" required></select>
+      </label>
+
+      <label>Note (optional)
+        <input id="note" maxlength="150"
+               placeholder="What was it for?">
+      </label>
+
+      <button type="submit" id="save">Save expense</button>
+    </form>
+  </div>
+</section>
+
+<section id="history">
+  <div class="card">
+    <h2>Expense history</h2>
+
+    <label>Filter by month
+      <input type="month" id="historyMonth" value="2026-10">
+    </label>
+
+    <div style="overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category / Note</th>
+            <th>Amount</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="settings">
+
+  <div class="card">
+    <h2>Backup</h2>
+    <p>Download all expenses as CSV or JSON.</p>
+    <button id="csv">Download CSV</button>
+    <button id="backup">JSON Backup</button>
+  </div>
+
+  <div class="card">
+    <h2>Online Storage</h2>
+    <p>Connected to Google Sheets through Apps Script.</p>
+    <p class="small muted">
+      No login required. Keep the website link private.
+    </p>
+  </div>
+
+</section>
+
+</main>
+
+<script>
+
+const ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbyNaoAwDD-qkVYfH4K3vZIyBp0bTfaeD0sQ47KkxuxbBBWfyNBIYw3hynS9lbwQ5BU/exec";
+
+const categories = [
+  "Grocery",
+  "Gas",
+  "Entertainment",
+  "Dining Out",
+  "Pet Food + Expsenses",
+  "Misc - Bday, Holidays, gifts, food",
+  "Misc - Household items",
+  "Transportation: Maintence Repairs",
+  "Travel Camping",
+  "Gummies",
+  "Personal Care: Nails, hair",
+  "Medical",
+  "Other"
+];
+
+let entries = [];
+let connected = false;
+
+const $ = id => document.getElementById(id);
+
+const money = n =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD"
+  }).format(n || 0);
+
+function notice(message) {
+  $("status").textContent = message;
+}
+
+function todayLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function initializeDates() {
+  const today = todayLocal();
+  $("date").value = today;
+  $("month").value = today.slice(0, 7);
+  $("historyMonth").value = today.slice(0, 7);
+}
+
+function populateCategories() {
+  $("category").replaceChildren();
+
+  categories.forEach(category => {
+    const option = document.createElement("option");
+    option.value = category;
+    option.textContent = category;
+    $("category").append(option);
+  });
+}
+
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const callback = "budgetCallback" +
+      Date.now() + Math.floor(Math.random() * 100000);
+
+    const script = document.createElement("script");
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Connection timed out"));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[callback];
+      script.remove();
+    }
+
+    window[callback] = result => {
+      cleanup();
+      resolve(result);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("Could not connect to Google Sheets"));
+    };
+
+    script.src = url + "?callback=" + callback +
+      "&t=" + Date.now();
+
+    document.head.append(script);
+  });
+}
+
+async function refresh() {
+  const result = await jsonp(ENDPOINT);
+
+  if (!result.ok) {
+    throw new Error(result.error || "Unable to load expenses");
+  }
+
+  entries = result.entries || [];
+  connected = true;
+
+  $("setupNotice").classList.add("hidden");
+
+  draw();
+  notice("Connected to Google Sheets");
+}
+
+function draw() {
+  const selectedMonth = $("month").value;
+
+  const monthEntries = entries.filter(
+    e => e.date && e.date.startsWith(selectedMonth)
+  );
+
+  const monthTotal = monthEntries.reduce(
+    (sum, e) => sum + Number(e.amount), 0
+  );
+
+  const allTotal = entries.reduce(
+    (sum, e) => sum + Number(e.amount), 0
+  );
+
+  $("monthTotal").textContent = money(monthTotal);
+  $("allTotal").textContent = money(allTotal);
+  $("monthCount").textContent = monthEntries.length;
+
+  const totals = categories.map(category => ({
+    category,
+    total: monthEntries
+      .filter(e => e.category === category)
+      .reduce((sum, e) => sum + Number(e.amount), 0)
+  }));
+
+  const max = Math.max(1, ...totals.map(e => e.total));
+
+  $("categories").replaceChildren();
+
+  totals.forEach(item => {
+    const container = document.createElement("div");
+    container.style.margin = "14px 0";
+
+    const row = document.createElement("div");
+    row.className = "row";
+
+    const name = document.createElement("span");
+    name.textContent = item.category;
+
+    const value = document.createElement("strong");
+    value.textContent = money(item.total);
+
+    row.append(name, value);
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+
+    const fill = document.createElement("span");
+    fill.style.width = (item.total / max * 100) + "%";
+
+    bar.append(fill);
+    container.append(row, bar);
+
+    $("categories").append(container);
+  });
+
+  drawHistory();
+}
+
+function drawHistory() {
+  $("rows").replaceChildren();
+
+  const month = $("historyMonth").value;
+
+  entries
+    .filter(e => e.date && e.date.startsWith(month))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .forEach(entry => {
+
+      const tr = document.createElement("tr");
+
+      const date = document.createElement("td");
+      date.textContent = entry.date;
+
+      const category = document.createElement("td");
+      category.textContent =
+        entry.category + (entry.note ? " · " + entry.note : "");
+
+      const amount = document.createElement("td");
+      amount.textContent = money(entry.amount);
+
+      const action = document.createElement("td");
+      const button = document.createElement("button");
+
+      button.textContent = "Delete";
+      button.className = "danger small";
+
+      button.onclick = () => deleteExpense(entry.id);
+
+      action.append(button);
+      tr.append(date, category, amount, action);
+
+      $("rows").append(tr);
+    });
+}
+
+async function send(payload) {
+  if (!connected) {
+    throw new Error("Not connected to Google Sheets");
+  }
+
+  const body = new URLSearchParams({
+    payload: JSON.stringify(payload)
+  });
+
+  await fetch(ENDPOINT, {
+    method: "POST",
+    mode: "no-cors",
+    body
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await refresh();
+}
+
+async function deleteExpense(id) {
+  if (!confirm("Delete this expense?")) return;
+
+  try {
+    notice("Deleting expense...");
+    await send({ action: "delete", id });
+    notice("Expense deleted");
+  } catch (error) {
+    notice("Delete could not be confirmed: " + error.message);
+  }
+}
+
+document.querySelectorAll("nav button").forEach(button => {
+  button.onclick = () => {
+    document.querySelectorAll("nav button, section")
+      .forEach(element => element.classList.remove("active"));
+
+    button.classList.add("active");
+    $(button.dataset.tab).classList.add("active");
+  };
+});
+
+$("month").onchange = draw;
+$("historyMonth").onchange = draw;
+
+$("expenseForm").onsubmit = async event => {
+  event.preventDefault();
+
+  const amount = Number($("amount").value);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    notice("Enter a valid amount.");
+    return;
+  }
+
+  const entry = {
+    id: crypto.randomUUID(),
+    date: $("date").value,
+    amount: Math.round(amount * 100) / 100,
+    category: $("category").value,
+    note: $("note").value.trim()
+  };
+
+  $("save").disabled = true;
+
+  try {
+    notice("Saving expense...");
+
+    await send({
+      action: "add",
+      entry
+    });
+
+    if (!entries.some(e => e.id === entry.id)) {
+      throw new Error("Expense not found after saving");
+    }
+
+    $("expenseForm").reset();
+    $("date").value = todayLocal();
+
+    notice("Expense saved successfully!");
+
+    document.querySelector(
+      '[data-tab="dashboard"]'
+    ).click();
+
+  } catch (error) {
+    notice("Save could not be confirmed: " + error.message);
+  } finally {
+    $("save").disabled = false;
+  }
+};
+
+function download(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("backup").onclick = () => {
+  download(
+    "moms-budget-backup.json",
+    JSON.stringify({ categories, entries }, null, 2),
+    "application/json"
+  );
+};
+
+$("csv").onclick = () => {
+  const quote = value =>
+    '"' + String(value ?? "").replaceAll('"', '""') + '"';
+
+  const rows = [
+    ["Date", "Category", "Amount", "Note"],
+    ...entries.map(e => [
+      e.date, e.category, e.amount, e.note
+    ])
+  ];
+
+  const csv = rows
+    .map(row => row.map(quote).join(","))
+    .join("\r\n");
+
+  download("moms-budget.csv", csv, "text/csv");
+};
+
+initializeDates();
+populateCategories();
+
+refresh().catch(error => {
+  connected = false;
+  $("setupNotice").classList.remove("hidden");
+  notice("Connection failed: " + error.message);
+});
+
+</script>
+
+</body>
+</html>
